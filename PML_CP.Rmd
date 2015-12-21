@@ -1,0 +1,117 @@
+---
+title: "Coursera Practical Machine Learning Project"
+output: html_document
+---
+  
+## Introduction
+This report is part of the Coursera Data Science specialisation as offered by John Hopkins
+
+The question is as follows (direct copy from Coursera)
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+This report therefore trys to establish how the execerises were performed  
+
+## Data Preprocessing  
+We load several R packages to allow the analysis to be performed
+
+```{r}
+library(e1071)
+library(caret)
+library(rpart)
+library(corrplot)
+library(rpart.plot)
+library(randomForest)
+```
+
+### Downloading the Data
+The data is downloaded 
+
+```{r}
+setwd("C:/Users/Stickman/Downloads/PML")
+TrainData <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+TestData <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+TrainDataFile <- "C:/Users/Stickman/Downloads/PML/data/pml-training.csv"
+TestDataFile  <- "C:/Users/Stickman/Downloads/PML/data/pml-testing.csv"
+```
+
+### Reading the Data
+After downloading the data from the data source, we can read the two csv files into two data frames.  
+
+```{r}
+TrainRawData <- read.csv("C:/Users/Stickman/Downloads/PML/data/pml-training.csv")
+TestRawData <- read.csv("C:/Users/Stickman/Downloads/PML/data/pml-testing.csv")
+```
+
+Check the files read correctly(good practise)
+
+```{r}
+dim(TrainRawData)
+dim(TestRawData)
+```
+
+The above read tells us that the training data has 19622 observations, with 160 variables, while the testing data  contains 20 observations and 160 variables. 
+
+The "classe" variable in the training set is the outcome to predict. 
+
+### Cleaning the data
+It is critical to remove the data that refers to missing/meaningless data points.It must also be noted that the same transform is done to both data sets for consistency. This is done by removing columns with NA values adn values with little impact. 
+
+```{r}
+TrainRawData <- TrainRawData[, colSums(is.na(TrainRawData)) == 0] 
+TestRawData <- TestRawData[, colSums(is.na(TestRawData)) == 0] 
+classe <- TrainRawData$classe
+TrainRemoveData <- grepl("^X|timestamp|window", names(TrainRawData))
+TrainRawData <- TrainRawData[, !TrainRemoveData]
+TrainCleanedData <- TrainRawData[, sapply(TrainRawData, is.numeric)]
+TrainCleanedData$classe <- classe
+TestRemoveData <- grepl("^X|timestamp|window", names(TestRawData))
+TestRawData <- TestRawData[, !TestRemoveData]
+TestCleanedData <- TestRawData[, sapply(TestRawData, is.numeric)]
+```
+The cleaning reduces the amount of data to be used going forward.
+
+### Splitting the data
+The training set now needs to be split into the main training data and validation data (both coming from the training data). This was done as a 65:35 split. A seed is also set to allow reproduceability (72 in this case).
+
+```{r}
+set.seed(72) 
+inTrain <- createDataPartition(TrainCleanedData$classe, p=0.65, list=F)
+TrainDataS <- TrainCleanedData[inTrain, ]
+TestDataS <- TrainCleanedData[-inTrain, ]
+```
+
+## Data Modeling
+In order to generate a prediction random forrests have been selected. This is due to the automatic selection of the key variables. This has been coupled with cross validation (5 fold), to improve the model.(ntree = 25, used due to limited computational power)
+
+```{r}
+MyTrainControl <- trainControl(method="cv",number=5,repeats=5)
+ModelRF <- train(classe ~ ., data=TrainDataS, method="rf", trControl=MyTrainControl, ntree=25)
+```
+
+The validation data set is then used to assess performance  
+
+```{r}
+PredictRF <- predict(ModelRF, TestDataS)
+confusionMatrix(TestDataS$classe, PredictRF)
+Accuracy <- postResample(PredictRF, TestDataS$classe)
+ErrorOOSE <- 1 - as.numeric(confusionMatrix(TestDataS$classe, PredictRF)$overall[1])
+Accuracy
+ErrorOOSE
+```
+
+The results are as follows
+Accuracy: 99.0%
+Out-Of-Sample Error: 0.1%
+
+THe model is therefore good to use.
+
+## Predicting using the Test Data Set
+We now use the Test Data, and get the final results.  
+
+```{r}
+Answer <- predict(ModelRF, TestCleanedData[, -length(names(TestCleanedData))])
+Answer
+```
+
+These results are what have been submitted for the final assessment :-)
